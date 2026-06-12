@@ -8,7 +8,7 @@
 ![ResuMetric demo](docs/demo.gif)
 -->
 
-🔗 **Live demo:** _add your deployed URL here_
+🔗 **Live demo:** https://saidumpala-resumetric.hf.space/docs
 
 ---
 
