@@ -62,3 +62,29 @@ def test_raises_after_two_bad_responses():
     with pytest.raises(EvaluationError):
         evaluate("source", "document", client)
     assert client.calls == 2
+
+
+def test_overall_is_recomputed_not_trusted_from_model():
+    lying = VALID_JSON.replace('"overall": 4.33', '"overall": 5.0')
+    result = evaluate("source", "document", StubClient([lying]))
+    assert result.overall == pytest.approx(4.33)  # (4+5+5+3+4+5)/6
+
+
+def test_meta_records_attempts_model_and_tokens():
+    class UsageClient(StubClient):
+        model = "fake-model"
+
+        def complete(self, system, user):
+            self.last_usage = {"input_tokens": 100, "output_tokens": 20}
+            return super().complete(system, user)
+
+    result = evaluate("source", "document", UsageClient(["junk", VALID_JSON]))
+    assert result.meta.attempts == 2
+    assert result.meta.model == "fake-model"
+    assert (result.meta.input_tokens, result.meta.output_tokens) == (200, 40)
+    assert result.meta.latency_ms >= 0
+
+
+def test_meta_tokens_are_none_when_client_reports_no_usage():
+    result = evaluate("source", "document", StubClient([VALID_JSON]))
+    assert result.meta.input_tokens is None

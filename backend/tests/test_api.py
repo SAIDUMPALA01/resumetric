@@ -4,7 +4,6 @@ deterministic - no network and no API key required."""
 from fastapi.testclient import TestClient
 
 import main
-from evaluator import EvaluationError
 
 client = TestClient(main.app)
 

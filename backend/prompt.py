@@ -47,7 +47,6 @@ Respond with ONLY valid JSON, no preamble, no markdown fences, in this shape:
     "consistency": <int>,
     "specification_adherence": <int>
   },
-  "overall": <float, average of the six>,
   "flags": [
     {"section": "<name>", "issue": "<what is wrong>", "severity": "high|medium|low"}
   ],
@@ -57,9 +56,4 @@ Respond with ONLY valid JSON, no preamble, no markdown fences, in this shape:
 
 def build_user_message(source: str, document: str) -> str:
     """Assemble the per-request message containing the source and document."""
-    return (
-        "SOURCE:\n"
-        f"{source.strip()}\n\n"
-        "DOCUMENT:\n"
-        f"{document.strip()}"
-    )
+    return f"SOURCE:\n{source.strip()}\n\nDOCUMENT:\n{document.strip()}"

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResuMetric</title>
+<meta name="description" content="Check an AI-generated CV or document against its source for missing and invented content.">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --muted: #5b6472; --line: #dfe3e8;
+    --accent: #2457d6; --accent-ink: #ffffff; --good: #1f8a4c; --warn: #b7791f; --bad: #c0392b;
+    --radius: 10px; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --panel: #171b21; --ink: #e8ebef; --muted: #9aa4b2; --line: #2a313b;
+            --accent: #6b93ff; --accent-ink: #0f1216; --good: #4cc282; --warn: #e0a84a; --bad: #ef6b5b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header, main, footer { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 28px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); margin: 0 0 20px; max-width: 70ch; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  label { font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+  label small { font-weight: 400; color: var(--muted); }
+  textarea { width: 100%; min-height: 240px; resize: vertical; padding: 10px; border-radius: 8px;
+             border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 13px/1.5 var(--mono); }
+  .file { font-size: 13px; color: var(--accent); cursor: pointer; }
+  .file input { display: none; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 16px 0; }
+  button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px;
+           padding: 10px 18px; font-weight: 600; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: progress; }
+  .link { background: none; color: var(--accent); padding: 0; font-weight: 500; font-size: 14px; }
+  .check { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 14px; }
+  .error { color: var(--bad); font-weight: 500; }
+  #result[hidden] { display: none; }
+  .verdict { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .overall { font-size: 44px; font-weight: 700; line-height: 1; }
+  .overall small { font-size: 16px; color: var(--muted); font-weight: 500; }
+  .bars { display: grid; gap: 10px; margin-top: 14px; }
+  .bar { display: grid; grid-template-columns: 190px 1fr 44px; gap: 10px; align-items: center; font-size: 14px; }
+  @media (max-width: 520px) { .bar { grid-template-columns: 1fr 44px; } .bar .track { grid-column: 1 / -1; grid-row: 2; } }
+  .track { height: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .fill { height: 100%; border-radius: 99px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  ul.flags { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  ul.flags li { border-left: 4px solid var(--line); padding: 6px 10px; background: var(--bg); border-radius: 6px; }
+  .sev-high { border-color: var(--bad) !important; } .sev-medium { border-color: var(--warn) !important; } .sev-low { border-color: var(--muted) !important; }
+  .meta { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+  h2 { font-size: 16px; margin: 18px 0 8px; }
+  footer { color: var(--muted); font-size: 13px; padding-bottom: 32px; padding-top: 24px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ResuMetric</h1>
+  <p class="lede">Paste the information a document <em>should</em> be built from, and the AI-generated document itself.
+    ResuMetric scores it on six dimensions and flags anything missing or invented.
+    Based on the <a href="https://doi.org/10.5281/zenodo.20102941">six-dimension evaluation framework</a>.</p>
+</header>
+<main>
+  <form id="form">
+    <div class="grid">
+      <div class="panel">
+        <label for="source">Source <small><span class="file">Upload PDF / TXT<input type="file" accept=".pdf,.txt,.md" data-target="source"></span></small></label>
+        <textarea id="source" required placeholder="e.g. your transcript, notes, or the facts the CV should contain"></textarea>
+      </div>
+      <div class="panel">
+        <label for="document">Generated document <small><span class="file">Upload PDF / TXT<input type="file" accept=".pdf,.txt,.md" data-target="document"></span></small></label>
+        <textarea id="document" required placeholder="e.g. the CV an AI wrote from that source"></textarea>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="go" type="submit">Evaluate</button>
+      <span class="check"><input type="checkbox" id="consistency"><label for="consistency" style="margin:0;font-weight:400">Run 3 times and check the judge is consistent</label></span>
+      <button type="button" class="link" id="example">Load an example</button>
+      <span id="status" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+
+  <section id="result" class="panel" hidden aria-live="polite">
+    <div class="verdict">
+      <div class="overall" id="overall"></div>
+      <p id="summary" style="margin:0;max-width:70ch"></p>
+    </div>
+    <div class="bars" id="bars"></div>
+    <h2 id="flags-title">Flags</h2>
+    <ul class="flags" id="flags"></ul>
+    <p id="stability" class="meta"></p>
+    <p id="meta" class="meta"></p>
+  </section>
+</main>
+<footer>Built by Sai Dumpala · <a href="https://github.com/SAIDUMPALA01/resumetric">Source on GitHub</a> · <a href="/docs">API docs</a>.
+  Inputs are sent to an LLM for scoring and are not stored.</footer>
+
+<script>
+const LABELS = {
+  completeness: "Completeness", contextual_utilisation: "Contextual utilisation",
+  factual_accuracy: "Factual accuracy", confidence_calibration: "Confidence calibration",
+  consistency: "Consistency", specification_adherence: "Specification adherence",
+};
+const $ = (id) => document.getElementById(id);
+const colour = (s) => s >= 4 ? "var(--good)" : s >= 3 ? "var(--warn)" : "var(--bad)";
+
+function el(tag, attrs = {}, text) {
+  const node = document.createElement(tag);
+  Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = body.detail;
+    throw new Error(Array.isArray(d) ? d.map((e) => `${e.loc.at(-1)}: ${e.msg}`).join("; ") : d || `Request failed (${res.status})`);
+  }
+  return body;
+}
+
+document.querySelectorAll('input[type=file]').forEach((input) => {
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const form = new FormData(); form.append("file", file);
+    $("status").textContent = `Reading ${file.name}…`; $("status").className = "";
+    try {
+      const out = await api("/extract-text", { method: "POST", body: form });
+      $(input.dataset.target).value = out.text;
+      $("status").textContent = `Loaded ${out.characters.toLocaleString()} characters from ${out.filename}.`;
+    } catch (e) { $("status").textContent = e.message; $("status").className = "error"; }
+    input.value = "";
+  });
+});
+
+$("example").addEventListener("click", () => {
+  $("source").value = "Name: Alex Morgan\nEmail: alex.morgan@example.com\nMSc Data Science, University of Leeds (2024)\nBSc Mathematics, University of York (2022)\nInternship: Data Analyst Intern, Northwind Retail, Jun-Aug 2023 - built weekly sales dashboards in Power BI\nProject: churn prediction model in Python and scikit-learn, 0.81 ROC-AUC";
+  $("document").value = "ALEX MORGAN\nalex.morgan@example.com | +44 7700 900123 | github.com/alexmorgan-ds\n\nEDUCATION\nMSc Data Science, University of Leeds, 2024 (Distinction)\nBSc Mathematics, University of York, 2022\n\nEXPERIENCE\nData Analyst Intern, Northwind Retail (Jun-Aug 2023)\n- Built Power BI dashboards that cut reporting time by 40%\n\nPROJECTS\n- Churn prediction model (Python, scikit-learn), 0.81 ROC-AUC\n- Customer segmentation with k-means across 120,000 customers";
+});
+
+function render(ev, stability) {
+  const overall = stability ? stability.overall_mean : ev.overall;
+  $("overall").replaceChildren(document.createTextNode(overall.toFixed(2)), el("small", {}, stability ? " / 5 (mean of runs)" : " / 5"));
+  $("summary").textContent = ev.summary;
+  $("bars").replaceChildren(...Object.entries(LABELS).map(([key, label]) => {
+    const s = stability ? stability.dimensions[key].mean : ev.scores[key];
+    const row = el("div", { class: "bar" });
+    const track = el("div", { class: "track" });
+    const fill = el("div", { class: "fill", style: `width:${(s / 5) * 100}%;background:${colour(s)}` });
+    track.append(fill);
+    const spread = stability && stability.dimensions[key].spread ? ` ±${stability.dimensions[key].spread}` : "";
+    row.append(el("span", {}, label), track, el("span", { class: "num" }, `${Number.isInteger(s) ? s : s.toFixed(1)}${spread}`));
+    return row;
+  }));
+  const flags = ev.flags || [];
+  $("flags-title").textContent = flags.length ? `Flags (${flags.length})` : "No flags raised";
+  $("flags").replaceChildren(...flags.map((f) => {
+    const li = el("li", { class: `sev-${f.severity}` });
+    li.append(el("strong", {}, `${f.section}: `), document.createTextNode(`${f.issue} (${f.severity})`));
+    return li;
+  }));
+  $("stability").textContent = stability
+    ? (stability.stable ? `Judge was consistent across ${stability.runs} runs (no dimension moved by more than 1 point).`
+                        : `Warning: the judge's scores moved by 2+ points across ${stability.runs} runs - treat single scores with caution.`)
+    : "";
+  const m = ev.meta || {};
+  $("meta").textContent = [m.model, m.latency_ms && `${Math.round(m.latency_ms)} ms`,
+    m.input_tokens != null && `${m.input_tokens} in / ${m.output_tokens} out tokens`, m.attempts > 1 && `${m.attempts} attempts`]
+    .filter(Boolean).join(" · ");
+  $("result").hidden = false;
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+$("form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const many = $("consistency").checked;
+  $("go").disabled = true; $("status").className = "";
+  $("status").textContent = many ? "Evaluating 3 times…" : "Evaluating…";
+  try {
+    const payload = { source: $("source").value, document: $("document").value };
+    if (many) {
+      const out = await api("/evaluate/consistency", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, runs: 3 }) });
+      render(out.evaluations[0], out);
+    } else {
+      render(await api("/evaluate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }));
+    }
+    $("status").textContent = "";
+  } catch (e) {
+    $("status").textContent = e.message; $("status").className = "error";
+  } finally { $("go").disabled = false; }
+});
+</script>
+</body>
+</html>
